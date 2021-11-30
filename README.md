@@ -11,3 +11,5 @@ See SKAN_Revenue_Cohort_Attribution_V2.docx for POC description and model deriva
 
 Next steps:
 Setting the constraints for each campaign to the total installs in the postback for that campaign rather than the sum of all installs for all campaigns combined yields better performance in almost all cases, most notably with the log likelihood and smaller SD. The only issue is an engineering one as I had to hardcode the number of campaigns with separate campaign-install parameters  as I'm not sure how to set dynamic constraints for a vector - clearly this presents scaling issues.
+
+In addition, while it was not done in this simulation, the priors must be derived from the bernoulli distributions obtained via the SKAN send times, and subsequently, the variance of the priors for each inst_c_a (each campaign's installs on day a) should necessarily reflect the uncertainty in the original bernoullie distribution.
