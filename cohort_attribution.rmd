@@ -39,7 +39,6 @@ I_ea_a = sum(inst_c_a)+ORG_a
 
 ```{r}
 
-chrt_attr_mod1 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v2.stan')
 #chrt_attr_mod1 = stan_model('cohort_attribution_v2.stan')
 fit_chrt_attr_goodprior = sampling(chrt_attr_mod1, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_good, num_cmps=num_cmps  ), chains=4, iter=10000, warmup=3000)
 print(fit_chrt_attr_goodprior, pars=c("inst_c_a", "ORG_a", "inst_c_a_sum"))
