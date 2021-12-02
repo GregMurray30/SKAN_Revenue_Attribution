@@ -1,0 +1,97 @@
+---
+title: "Untitled"
+author: "Greg"
+date: "5/30/2021"
+output: html_document
+---
+
+```{r}
+library(rstan)
+library(shinystan)
+library(lmtest)
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(tidybayes)
+options(mc.cores=4)
+par(mar=c(2,2,2,2)) #set margins
+```
+
+```{r}
+library(extraDistr)
+##Total number of installs in the postback (could be a mix of day a and day b installs)
+K_c_skan = c(60, 50, 40)
+K_skan = sum(K_c_skan)
+
+
+##Priors derived from marginal probabilities in the SKAN send times assuming r=0
+sendtimes_c = runif(K_skan, 0,23.99)
+marginal_c_a = (24-sendtimes_c)/24
+mean(marginal_c_a)
+prior_mu_c_a = c ( mean(marginal_c_a[1:60])*K_c_skan[1] , mean(marginal_c_a[61:110])*K_c_skan[2] , mean(marginal_c_a[111:150])*K_c_skan[3] )
+
+prior_var_c_a = c ( var(marginal_c_a[1:60])*K_c_skan[1] , var(marginal_c_a[61:110])*K_c_skan[2] , var(marginal_c_a[111:150])*K_c_skan[3] )
+
+num_cmps = 3
+##Vector of actual install counts for each campaign to generate the total installs in the EA server (inst_c_a is not passed to model), Also used to calculate accuracy as they are the labels
+inst_c_a = c(sum(rdunif(K_c_skan[1],0,1)) ,sum( rdunif(K_c_skan[2],0,1)),
+             sum(rdunif(K_c_skan[3],0,1)) )
+##Number of organic installs
+ORG_a = 110
+
+I_ea_a = sum(inst_c_a)+ORG_a
+```
+
+```{r}
+
+chrt_attr_mod2 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v2.stan')
+#chrt_attr_mod1 = stan_model('cohort_attribution_v2.stan')
+fit_chrt_attr_goodprior_v2 = sampling(chrt_attr_mod2, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_good, num_cmps=num_cmps  ), chains=4, iter=10000, warmup=3000)
+
+chrt_attr_mod3 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v3.stan')
+fit_chrt_attr_derprior_v3 = sampling(chrt_attr_mod3, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a, prior_var_c_a=prior_var_c_a, num_cmps=num_cmps  ), chains=4, iter=10000, warmup=3000)
+
+print(fit_chrt_attr_goodprior, pars=c("inst_c_a", "ORG_a", "inst_c_a_sum"))
+```
+
+```{r}
+fit_chrt_attr_badprior_v2 = sampling(chrt_attr_mod2, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_bad, num_cmps=num_cmps  ), chains=4, iter=10000, warmup=3000)
+
+fit_chrt_attr_badprior_v3 = sampling(chrt_attr_mod3, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_bad, num_cmps=num_cmps  ), chains=4, iter=10000, warmup=3000)
+
+```
+
+```{r}
+print(inst_c_a)
+#print(fit_chrt_attr_goodprior_v2)
+
+print(fit_chrt_attr_derprior_v3)
+```
+```{r}
+#print(fit_chrt_attr_goodprior_v3)
+print(fit_chrt_attr_badprior_v3)
+```
+
+```{r}
+
+
+dataset = data.frame(inst_c_a)
+colnames(dataset) <- c('install_actuals')
+
+fit_chrt_attr_goodprior %>% gather_draws(inst_c_a[N]) %>%
+  left_join(
+    dataset %>% 
+      select(install_actuals) %>%
+      mutate(N = 1:n())
+  ) %>%
+  rename(inst_c_a = .value) %>%
+  ggplot(aes(x = install_actuals, y = inst_c_a)) + 
+  geom_point(size = 0.1, alpha = 0.2) +
+  geom_abline(data = data.frame(slope = 1, intercept = 0), 
+              aes(intercept = intercept, slope = slope), 
+              color = "red") +
+  theme_minimal() + 
+  ggtitle("Predictive Posterior")
+```
+
+
