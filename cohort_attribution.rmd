@@ -1,0 +1,193 @@
+---
+title: "Untitled"
+author: "Greg"
+date: "5/30/2021"
+output: html_document
+---
+
+```{r}
+library(rstan)
+library(shinystan)
+library(lmtest)
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(tidybayes)
+library(extraDistr)
+
+options(mc.cores=4)
+par(mar=c(2,2,2,2)) #set margins
+```
+
+
+
+```{r}
+# Poisson Binomial Simulations
+dpois_binom <- function(y, theta) {
+  N <- length(theta);
+  if (N == 0) return(ifelse(y == 0, 1, 0));
+  if (N == 1) return(ifelse(y == 1, theta[1], 1 - theta[1]));
+  if (y == 0) return(prod(1 - theta));
+  # y >= 1, N >= 2
+  tail <- theta[2:N];
+  return((1 - theta[1]) * dpois_binom(y, tail) + theta[1] * dpois_binom(y - 1, tail));
+}
+
+
+
+PMF.1 <- function(N,P) {
+A <- rep(0,(N+2))
+A[2] <- 1
+for (j in 1:N) for (i in (j+2):2) A[i] <- A[i]+(A[i-1]-A[i])*P[j]
+return(A[2:(N+2)])
+}
+
+N <- 5
+P <- c(0.1,0.2,0.3,0.4,0.5)
+PMF.1(N,P)
+sum(PMF.1(N,P))
+
+
+sim_pbd <- function(bernoulli_probs) {
+  res=0
+  for(i in 1:length(bernoulli_probs)) {
+    res = res+rbern(1, bernoulli_probs[i])
+  }
+  return(res) 
+}
+
+sim_sum  = sim_pbd(c(.2, .5, .1, .1, .1, .9, .9, .9, .7))
+```
+
+```{r}
+##Total number of installs in the postback (could be a mix of day a and day b installs)
+K_c_skan = c(100, 100, 60)
+K_skan = sum(K_c_skan)
+
+
+##Priors derived from marginal probabilities in the SKAN send times assuming r=0
+sendtimes_c = runif(K_skan, 0,23.99)
+marginal_c_a = (24-sendtimes_c)/24
+prior_mu_c_a = c ( 
+  as.integer(round(sum(marginal_c_a[1:K_c_skan[1]]),0)) 
+, as.integer(round(sum(marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])]),0)) 
+, as.integer(round(sum(marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])]),0)) )
+
+prior_var_c_a = c ( 
+  as.integer(round(sqrt(sum(marginal_c_a[1:K_c_skan[1]]*(1-marginal_c_a[1:K_c_skan[1]]))),0)),
+  as.integer(round(sqrt(sum(marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])]*(1-marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])]))),0)),
+  as.integer(round(sqrt(sum(marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])]*(1-marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])]))),0))
+  )
+
+
+num_cmps = 3
+##Vector of actual install counts for each campaign to generate the total installs in the EA server (inst_c_a is not passed to model), Also used to calculate accuracy as they are the labels
+inst_c_a = c(sim_pbd(marginal_c_a[1:K_c_skan[1]]), sim_pbd(marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])]),sim_pbd(marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])]))
+##Number of organic installs
+ORG = c(112, 107)
+
+I_ea = c(sum(inst_c_a)+ORG[1],  sum(K_c_skan-inst_c_a)+ORG[2])
+
+
+print('actual paid Day A:')
+print( inst_c_a)
+print('actual paid Day B:')
+K_c_skan-inst_c_a 
+print('Prior Day A:')
+prior_mu_c_a
+print('Prior Day B:')
+K_c_skan-prior_mu_c_a
+print('Total EA Installs:')
+I_ea
+```
+
+```{r}
+
+chrt_attr_mod2 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v2.stan')
+#chrt_attr_mod1 = stan_model('cohort_attribution_v2.stan')
+fit_chrt_attr_goodprior_v2 = sampling(chrt_attr_mod2, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_good, num_cmps=num_cmps  ), chains=4, iter=7000, warmup=3000)
+
+chrt_attr_mod3 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v3.stan')
+fit_chrt_attr_derprior_v3 = sampling(chrt_attr_mod3, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a, prior_var_c_a=prior_var_c_a, num_cmps=num_cmps, bernoulli_probs_c1=marginal_c_a[1:60],bernoulli_probs_c2=marginal_c_a[61:110], bernoulli_probs_c3=marginal_c_a[111:150]   ), chains=4, iter=7000, warmup=3000)
+
+chrt_attr_mod4 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v4.stan')
+fit_chrt_attr_derprior_v4 = sampling(chrt_attr_mod4, list( I_ea=I_ea, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a,prior_var_c_a=prior_var_c_a^2,  num_cmps=num_cmps, bernoulli_probs_c1=marginal_c_a[1:K_c_skan[1]],bernoulli_probs_c2=marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])], bernoulli_probs_c3=marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])] , org_var=20  ), chains=4, iter=7000, warmup=3000)
+
+#print(fit_chrt_attr_goodprior, pars=c("inst_c_a", "ORG_a", "inst_c_a_sum"))
+```
+
+
+```{r}
+
+#print('actual paid Day B:')
+#K_c_skan-inst_c_a 
+
+print('Total EA Installs:')
+I_ea
+print('')
+print('Prior Day A:')
+prior_mu_c_a
+print('actual paid Day A:')
+print( inst_c_a)
+#print(fit_chrt_attr_goodprior_v2)
+
+print(fit_chrt_attr_derprior_v4)
+#launch_shinystan(fit_chrt_attr_derprior_v3)
+```
+```{r}
+30.07+25.20+ 19.89+111.84
+```
+
+
+```{r}
+est_1<- fit_chrt_attr_derprior_v4 %>% gather_draws(inst_c1_a) 
+est_1 %>% 
+  ggplot(aes(x=.value)) +
+  geom_density( fill="dodgerblue", alpha=0.5)+
+  #scale_x_log10()+
+  geom_vline(xintercept=inst_c_a[1], size=1.5, color="red")+
+  geom_vline(xintercept=mean(est_1$.value), size=1.5, color="black")+
+  geom_vline(xintercept=prior_mu_c_a[1], size=1.5, color="green")
+
+est_2<- fit_chrt_attr_derprior_v4 %>% gather_draws(inst_c2_a) 
+est_2 %>% 
+  ggplot(aes(x=.value)) +
+  geom_density( fill="dodgerblue", alpha=0.5)+
+  #scale_x_log10()+
+  geom_vline(xintercept=inst_c_a[2], size=1.5, color="red")+
+  geom_vline(xintercept=mean(est_2$.value), size=1.5, color="black")+
+  geom_vline(xintercept=prior_mu_c_a[2], size=1.5, color="green")
+
+est_3<- fit_chrt_attr_derprior_v4 %>% gather_draws(inst_c3_a) 
+est_3 %>% 
+  ggplot(aes(x=.value)) +
+  geom_density( fill="dodgerblue", alpha=0.5)+
+  #scale_x_log10()+
+  geom_vline(xintercept=inst_c_a[3], size=1.5, color="red")+
+  geom_vline(xintercept=mean(est_3$.value), size=1.5, color="black")+
+  geom_vline(xintercept=prior_mu_c_a[3], size=1.5, color="green")
+
+
+```
+
+```{r}
+
+
+dataset = data.frame(inst_c_a)
+colnames(dataset) <- c('install_actuals')
+
+fit_chrt_attr_derprior_v3 %>% gather_draws(inst_c1_a,inst_c2_a,inst_c3_a ) %>%
+  cbind(
+    dataset %>% 
+      select(install_actuals) %>%
+      mutate(N = 1:n())
+  ) %>%
+  rename(inst_c1_a = .value) %>%
+  ggplot(aes(x = install_actuals, y = inst_c1_a)) + 
+  geom_point(size = 0.1, alpha = 0.2) +
+  geom_abline(data = data.frame(slope = 1, intercept = 0), 
+              aes(intercept = intercept, slope = slope), 
+              color = "red") +
+  theme_minimal() + 
+  ggtitle("Predictive Posterior")
+```
