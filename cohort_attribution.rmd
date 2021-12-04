@@ -104,7 +104,7 @@ I_ea
 ```{r}
 
 
-chrt_attr_mod4 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v4.stan')
+chrt_attr_mod4 = stan_model('cohort_attribution_v4.stan')
 fit_chrt_attr_derprior_v4 = sampling(chrt_attr_mod4, list( I_ea=I_ea, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a,prior_var_c_a=prior_var_c_a^2,  num_cmps=num_cmps, bernoulli_probs_c1=marginal_c_a[1:K_c_skan[1]],bernoulli_probs_c2=marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])], bernoulli_probs_c3=marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])] , org_var=20  ), chains=4, iter=7000, warmup=3000)
 
 #print(fit_chrt_attr_goodprior, pars=c("inst_c_a", "ORG_a", "inst_c_a_sum"))
