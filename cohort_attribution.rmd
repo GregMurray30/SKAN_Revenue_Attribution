@@ -103,19 +103,12 @@ I_ea
 
 ```{r}
 
-chrt_attr_mod2 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v2.stan')
-#chrt_attr_mod1 = stan_model('cohort_attribution_v2.stan')
-fit_chrt_attr_goodprior_v2 = sampling(chrt_attr_mod2, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a_good, num_cmps=num_cmps  ), chains=4, iter=7000, warmup=3000)
-
-chrt_attr_mod3 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v3.stan')
-fit_chrt_attr_derprior_v3 = sampling(chrt_attr_mod3, list( I_ea_a=I_ea_a, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a, prior_var_c_a=prior_var_c_a, num_cmps=num_cmps, bernoulli_probs_c1=marginal_c_a[1:60],bernoulli_probs_c2=marginal_c_a[61:110], bernoulli_probs_c3=marginal_c_a[111:150]   ), chains=4, iter=7000, warmup=3000)
 
 chrt_attr_mod4 = stan_model('/Users/greg.murray/OneDrive - Glu Mobile Inc/IDFA/attribution_models/cohort_attribution/cohort_attribution_v4.stan')
 fit_chrt_attr_derprior_v4 = sampling(chrt_attr_mod4, list( I_ea=I_ea, K_c_skan = K_c_skan, prior_mu_c_a=prior_mu_c_a,prior_var_c_a=prior_var_c_a^2,  num_cmps=num_cmps, bernoulli_probs_c1=marginal_c_a[1:K_c_skan[1]],bernoulli_probs_c2=marginal_c_a[(K_c_skan[1]+1):(K_c_skan[1]+K_c_skan[2])], bernoulli_probs_c3=marginal_c_a[(K_c_skan[1]+K_c_skan[2]+1):(K_c_skan[1]+K_c_skan[2]+K_c_skan[3])] , org_var=20  ), chains=4, iter=7000, warmup=3000)
 
 #print(fit_chrt_attr_goodprior, pars=c("inst_c_a", "ORG_a", "inst_c_a_sum"))
 ```
-
 
 ```{r}
 
@@ -134,10 +127,6 @@ print( inst_c_a)
 print(fit_chrt_attr_derprior_v4)
 #launch_shinystan(fit_chrt_attr_derprior_v3)
 ```
-```{r}
-30.07+25.20+ 19.89+111.84
-```
-
 
 ```{r}
 est_1<- fit_chrt_attr_derprior_v4 %>% gather_draws(inst_c1_a) 
